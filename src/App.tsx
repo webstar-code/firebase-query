@@ -11,9 +11,10 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   startAfter
 } from 'firebase/firestore'
-import { ListFilter, MoreHorizontal } from "lucide-react"
+import { ListFilter, MoreHorizontal, SortAsc, SortAscIcon } from "lucide-react"
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { apiMiddleware } from "./api/helper"
 import { Badge } from "./components/ui/badge"
@@ -28,6 +29,8 @@ import { db, dbCollections } from "./firebase"
 import { usePagination } from './hooks/usePagination'
 import { ITransaction } from "./lib/helper"
 import { cn } from './lib/utils'
+import { useState } from 'react'
+import { CaretSortIcon } from '@radix-ui/react-icons'
 
 const queryClient = new QueryClient()
 
@@ -47,15 +50,16 @@ function App() {
 function Transactions() {
   const { updatePaginationMap, onNextPage, onPrevPage, startAfterId, page, resultsPerPage, setResultsPerPage } =
     usePagination();
+  const [sorting, setSorting] = useState<{ field: "date", order: "desc" | "asc" }>({ field: "date", order: "desc" })
 
   const getTransactions = async () => {
     try {
       let q;
-      q = fquery(collection(db, dbCollections.transactions), limit(10));
+      q = fquery(collection(db, dbCollections.transactions), orderBy(sorting.field, sorting.order), limit(10));
       if (page > 1) {
         if (startAfterId) {
           const cursor = await getDoc(doc(db, dbCollections.transactions, startAfterId));
-          q = fquery(collection(db, dbCollections.transactions), startAfter(cursor), limit(10));
+          q = fquery(collection(db, dbCollections.transactions), orderBy(sorting.field, sorting.order), startAfter(cursor), limit(10));
         }
       }
       const snapshot = await getDocs(q);
@@ -79,7 +83,7 @@ function Transactions() {
   })
 
   const { data, status } = useQuery({
-    queryKey: ['transactions', page, resultsPerPage],
+    queryKey: ['transactions', page, sorting, resultsPerPage],
     queryFn: getTransactions
   })
 
@@ -112,18 +116,6 @@ function Transactions() {
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className="flex items-center gap-3 min-w-[200px]">
-            <Label htmlFor="status" className="whitespace-nowrap">Sort By</Label>
-            <Select>
-              <SelectTrigger id="status" aria-label="Select status">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">Date</SelectItem>
-                <SelectItem value="amount">Amount</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       </div>
 
@@ -141,7 +133,13 @@ function Transactions() {
                   Payment Method
                 </TableHead>
                 <TableHead className="hidden md:table-cell">
-                  Date
+                  <Button
+                    variant={"ghost"}
+                    onClick={() => setSorting({ field: "date", order: sorting.order === "asc" ? "desc" : "asc" })}
+                    className='flex items-center gap-2'>
+                    Date
+                    <CaretSortIcon />
+                  </Button>
                 </TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
@@ -163,7 +161,7 @@ function Transactions() {
                     {d.paymentMethod}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {new Date(d.date).toDateString()}
+                    {new Date(d.date).toLocaleString("default", { day: "numeric", month: "short", "year": "numeric" })}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
