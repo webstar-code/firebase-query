@@ -129,7 +129,7 @@ function Transactions() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Filter by</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
                 checked={statusFilters.includes("attempted") ? true : false}
@@ -189,7 +189,12 @@ function Transactions() {
                     {d.customer}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{d.status}</Badge>
+                    <Badge variant="outline"
+                      className={cn("capitalize", d.status === "attempted" && "bg-blue-600",
+                        d.status === "succeeded" && "bg-green-600",
+                        d.status === "failed" && "bg-red-600"
+                      )}
+                    >{d.status}</Badge>
                   </TableCell>
                   <TableCell>{d.amount}</TableCell>
                   <TableCell className="hidden md:table-cell">
