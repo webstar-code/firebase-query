@@ -1,3 +1,4 @@
+import { CaretSortIcon } from '@radix-ui/react-icons'
 import {
   QueryClient,
   QueryClientProvider,
@@ -12,27 +13,34 @@ import {
   getDocs,
   limit,
   orderBy,
-  startAfter
+  startAfter,
+  where
 } from 'firebase/firestore'
-import { ListFilter, MoreHorizontal, SortAsc, SortAscIcon } from "lucide-react"
+import { ListFilter, MoreHorizontal } from "lucide-react"
+import { useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { apiMiddleware } from "./api/helper"
 import { Badge } from "./components/ui/badge"
 import { Button } from "./components/ui/button"
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./components/ui/dropdown-menu"
-import { Label } from "./components/ui/label"
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from './components/ui/pagination'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table"
 import { Toaster } from "./components/ui/toaster"
 import { db, dbCollections } from "./firebase"
 import { usePagination } from './hooks/usePagination'
 import { ITransaction } from "./lib/helper"
 import { cn } from './lib/utils'
-import { useState } from 'react'
-import { CaretSortIcon } from '@radix-ui/react-icons'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 200000,
+      refetchInterval: 20000,
+      refetchOnWindowFocus: false,
+      staleTime: 200000
+    }
+  }
+})
 
 function App() {
   return (
@@ -51,15 +59,20 @@ function Transactions() {
   const { updatePaginationMap, onNextPage, onPrevPage, startAfterId, page, resultsPerPage, setResultsPerPage } =
     usePagination();
   const [sorting, setSorting] = useState<{ field: "date", order: "desc" | "asc" }>({ field: "date", order: "desc" })
-
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+ 
   const getTransactions = async () => {
     try {
-      let q;
-      q = fquery(collection(db, dbCollections.transactions), orderBy(sorting.field, sorting.order), limit(10));
+      const collectionRef = collection(db, dbCollections.transactions);
+      let q = fquery(collectionRef);
+      if (statusFilters && statusFilters.length > 0) {
+        q = fquery(q, where("status", "in", statusFilters))
+      }
+      q = fquery(q, orderBy(sorting.field, sorting.order), limit(10));
       if (page > 1) {
         if (startAfterId) {
           const cursor = await getDoc(doc(db, dbCollections.transactions, startAfterId));
-          q = fquery(collection(db, dbCollections.transactions), orderBy(sorting.field, sorting.order), startAfter(cursor), limit(10));
+          q = fquery(q, startAfter(cursor));
         }
       }
       const snapshot = await getDocs(q);
@@ -75,17 +88,30 @@ function Transactions() {
   }
 
   const { data: totalTransactions, status: totalTransactionsStatus } = useQuery({
-    queryKey: ['totalTransactions'], queryFn: async () => {
-      return await getCountFromServer(fquery(collection(db, dbCollections.transactions))).then((snapshot) => {
+    queryKey: ['totalTransactions', statusFilters], queryFn: async () => {
+      const collectionRef = collection(db, dbCollections.transactions);
+      let q = fquery(collectionRef);
+      if (statusFilters && statusFilters.length > 0) {
+        q = fquery(q, where("status", "in", statusFilters))
+      }
+      return await getCountFromServer(fquery(q)).then((snapshot) => {
         return snapshot.data().count
       });
     }
   })
 
   const { data, status } = useQuery({
-    queryKey: ['transactions', page, sorting, resultsPerPage],
+    queryKey: ['transactions', page, sorting, statusFilters, resultsPerPage],
     queryFn: getTransactions
   })
+
+  const updateFilters = (value: string, add?: boolean) => {
+    if (add) {
+      setStatusFilters([...statusFilters, value])
+    } else {
+      setStatusFilters(statusFilters.filter(f => f !== value))
+    }
+  }
 
   return (
     <main className='container w-full mx-auto p-6'>
@@ -105,13 +131,22 @@ function Transactions() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Filter by</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={statusFilters.includes("attempted") ? true : false}
+                onCheckedChange={(checked) => updateFilters("attempted", checked)}
+              >
                 Attempted
               </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={statusFilters.includes("succeeded") ? true : false}
+                onCheckedChange={(checked) => updateFilters("succeeded", checked)}
+              >
                 Succeeded
               </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={statusFilters.includes("failed") ? true : false}
+                onCheckedChange={(checked) => updateFilters("failed", checked)}
+              >
                 Failed
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
